@@ -6,25 +6,260 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## R Markdown
+## Synopsis
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+In this project we can use a data set of human body sensors to predict some movements.
+We will elaborate a predicting machine learning model.
+To achieve this goal, the steps we will go through are:
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+1. create a training set, a testing set and a validation set
+2. remove near zero variance variables
+3. identify and remove variables that have too much NAs
+4. plot variables
+5. compare various classification models
+6. choose three best models and stack them together
 
-```{r cars}
-summary(cars)
+```{r loading libraries, warnings=FALSE, messages=FALSE}
+#Loading required libraries
+library(caret)
+library(ggplot2)
+library(foreach)
+library(e1071)
+library(kernlab)
+library(C50)
+library(randomForest)
+library(ipred)
 ```
 
-## Including Plots
+##Reading files and creating training, testing and validation sets
+Training and testing sets will are  created from the file "pml-training.csv" (75% for training and 25% for testing).
+Validation set is created from the file "pml-testing.csv"
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r read training and testing files}
+set.seed(12345)
+fullData<-read.csv("C:/Users/igaal.perez/Documents/Data scientist/8 - Practical Machine Learning/pml-training.csv", stringsAsFactors = F)
+inTrain<-createDataPartition(y=fullData$classe, p=0.75, list=F)
+training<-fullData[inTrain, ]
+testing<-fullData[-inTrain, ]
+validation<-read.csv("C:/Users/igaal.perez/Documents/Data scientist/8 - Practical Machine Learning/pml-testing.csv", stringsAsFactors = F)
+head(training[1:5, 1:8])
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Removing the non numerical columns
+As we can see the first 6 columns are non numerical and are not relevant in the model creation. We will remove them since training models accept only numerical variables.
+```{r "Removing the first 6 columns which are not numerical"}
+training<-training[,-(1:6)]
+testing<-testing[,-(1:6)]
+validation<-validation[,-(1:6)]
+head(training[1:5, 1:8])
+```
+
+## Checking near zero variables
+```{r checking near zero variables and removing them from training, testing and validation}
+nsv<-nearZeroVar(training, freqCut=20, uniqueCut=20,saveMetrics = T)
+trainingnonzv<-training[,!nsv$nzv]
+testingnonzv<-testing[,!nsv$nzv]
+validationnonzv<-validation[,!nsv$nzv]
+head(training[1:5, 1:8])
+```
+
+
+```{r function isNACol checks if the percentage of NAs in each column is below the threshold ( default value at 50%)}
+isNACol<-function(x, thresh=0.5){
+    pcna<-list()
+    isBelowThresh=list()
+    for(i in 1:ncol(x)){
+        pcna[i]<-sum(is.na(x[,i]))/nrow(x)
+        isBelowThresh[i]<-as.logical(pcna[i]<thresh)
+       }
+isBelowThresh<-unlist(isBelowThresh)
+   }
+```
+
+##Removing variables that have more than 20% of missing values. For this purpose, we have created a function to check if a variable has more than a certain level on missing values
+```{r remove all variables that have less than 20% NAs}
+fullCol<-isNACol(trainingnonzv,0.2)
+trainingtidy<-trainingnonzv[,fullCol]
+testingtidy<-testingnonzv[,fullCol]
+validationtidy<-validationnonzv[,fullCol]
+head(training[1:5, 1:8])
+```
+
+
+## Plots
+As first glance, we will take a look on the distribution of the variable classe
+
+```{r classe distribution}
+# # first check the distribution of the variable classe
+#jpeg("C:/Users/igaal.perez/Documents/Data scientist/8 - Practical Machine Learning/barplot classe histogram - training dataset.jpg", width=600,height=600)
+barplot(table(trainingtidy$classe), main="classe histogram training dataset")
+
+```
+
+We have plotted all the remaining variables one versus the others (using featureplot). This can give us a hint on variables which can be good predictors.
+Here are few plots of variables that seem to be good predictors.
+
+```{r plots}
+qplot(x=magnet_belt_z, y=magnet_belt_y, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_forearm_z, y=magnet_forearm_y, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_forearm_z, y=magnet_forearm_x, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_forearm_x, y=magnet_forearm_y, data= trainingtidy, colour=classe)
+
+qplot(x=accel_forearm_y, y=magnet_forearm_y, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_dumbbell_z, y=magnet_forearm_y, data= trainingtidy, colour=classe)
+
+qplot(x=accel_belt_z, y=roll_belt, data= trainingtidy, colour=classe)
+
+qplot(x=total_accel_dumbbell, y=total_accel_arm, data= trainingtidy, colour=classe)
+
+qplot(x=total_accel_forearm, y=yaw_forearm, data= trainingtidy, colour=classe)
+
+qplot(x=total_accel_forearm, y=magnet_dumbbell_y, data= trainingtidy, colour=classe)
+
+qplot(x=yaw_belt, y=pitch_belt, data= trainingtidy, colour=classe)
+
+qplot(x=yaw_belt, y=roll_belt, data= trainingtidy, colour=classe)
+
+qplot(x=yaw_belt, y=num_window, data= trainingtidy, colour=classe)
+
+qplot(x=yaw_dumbbell, y=pitch_dumbbell, data= trainingtidy, colour=classe)
+
+qplot(x=total_accel_arm, y=magnet_belt_x, data= trainingtidy, colour=classe)
+
+qplot(x=gyros_arm_y, y=gyros_arm_x, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_arm_z, y=magnet_arm_x, data= trainingtidy, colour=classe)
+
+qplot(x=magnet_dumbbell_x, y=accel_dumbbell_y, data= trainingtidy, colour=classe)
+
+qplot(x=accel_forearm_y, y=accel_forearm_x, data= trainingtidy, colour=classe)
+dev.off()
+```
+
+##Comparing models
+We will use the Kappa criteria to measure errors because of the classification type.
+We have compared 6 classification algorithms: knn, gbm, LogitBoost, J48, rpart and C5.0.
+Off records, the random forest algorithm give very low accuracy and kappa values and consumes a lot of computational energy. For this purpose we have excluded it.
+```{r comparing models}
+modelcompare<-data.frame(matrix(data=NA, ncol=10))
+names(modelcompare)<-c("Method", "MethodLabel", "ModelType", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa","Start", "End", "Duration")
+methods<-list("knn", "gbm","LogitBoost","J48", "rpart", "C5.0")
+
+set.seed(12345) 
+for (j in 1: length(methods)){
+    ModStart<-Sys.time()
+    tControl<-trainControl(method="repeatedcv", verboseIter = T) 
+    modFit<-train(classe ~., data= trainingtidy, method=as.character(methods[j]),preProcess="pca", metric="Kappa", trControl=tControl)
+    ModEnd<-Sys.time()
+    prediction<-predict(modFit, newdata=testingtidy)
+    CM<-confusionMatrix(prediction, testingtidy$classe)
+
+    modelcompare[j,1]<-modFit$method
+    modelcompare[j,2]<-modFit$modelInfo$label
+    modelcompare[j,3]<-modFit$modelType
+    modelcompare[j,4]<-max(modFit$results$Accuracy)
+    modelcompare[j,5]<-max(modFit$results$Kappa)
+    modelcompare[j,6]<-CM$overall["Accuracy"]  
+    modelcompare[j,7]<-CM$overall["Kappa"] 
+    modelcompare[j,8]<-ModStart
+    modelcompare[j,9]<-ModEnd
+    modelcompare[j,10]<-ModEnd-ModStart
+}
+registerDoSEQ()
+
+head(modelcompare)
+```
+#Stacking models
+As per shown results, we will stack the 3 best models : gbm, knn and C5.0.
+We add a voting model using ipred lbrary) to improve the accuracy and kappa.
+
+```{r stacking models}
+# stacking the 3 best models and voting using ipred library
+modelresults<-data.frame(matrix(data=NA, ncol=10))
+names(modelresults)<-c("Method", "MethodLabel", "ModelType", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa" ,"Start", "End", "Duration(minutes)")
+set.seed(12345) 
+tControl<-trainControl(method="repeatedcv", verboseIter = T)
+
+Mod1Start<-Sys.time()
+modFit1<-train(classe ~., data= trainingtidy, method="gbm" ,preProcess="pca", metric="Kappa", trControl=tControl)
+prediction1<-predict(modFit1, newdata=testingtidy)
+CM1<-confusionMatrix(prediction1, testingtidy$classe)
+Mod1End<-Sys.time()
+
+Mod2Start<-Sys.time()
+modFit2<-train(classe ~., data= trainingtidy, method="knn" ,preProcess="pca", metric="Kappa", trControl=tControl)
+prediction2<-predict(modFit2, newdata=testingtidy)
+CM2<-confusionMatrix(prediction2, testingtidy$classe)
+Mod2End<-Sys.time()
+
+Mod3Start<-Sys.time()
+modFit3<-train(classe ~., data= trainingtidy, method="C5.0" ,preProcess="pca", metric="Kappa", trControl=tControl)
+prediction3<-predict(modFit3, newdata=testingtidy)
+CM3<-confusionMatrix(prediction3, testingtidy$classe)
+Mod3End<-Sys.time()
+
+predDF<-data.frame(prediction1, prediction2, prediction3,  classe=testingtidy$classe)
+
+ModCombStart<-Sys.time()
+combModFit<-bagging(classe ~., data=predDF)
+combPrediction<-predict(combModFit, predDF, aggregation=c("majority"))
+MComb<-confusionMatrix(combPrediction, testingtidy$classe)
+ModCombEnd<-Sys.time()
+
+modelresults[1,1]<-modFit1$method
+modelresults[1,2]<-modFit1$modelInfo$label
+modelresults[1,3]<-modFit1$modelType
+modelresults[1,4]<-max(modFit1$results$Accuracy)
+modelresults[1,5]<-max(modFit1$results$Kappa)
+modelresults[1,6]<-CM1$overall["Accuracy"]
+modelresults[1,7]<-CM1$overall["Kappa"]
+modelresults[1,8]<-as.character(Mod1Start)
+modelresults[1,9]<-as.character(Mod1End)
+modelresults[1,10]<-as.character(round(Mod1End-Mod1Start))
+
+modelresults[2,1]<-modFit2$method
+modelresults[2,2]<-modFit2$modelInfo$label
+modelresults[2,3]<-modFit2$modelType
+modelresults[2,4]<-max(modFit2$results$Accuracy)
+modelresults[2,5]<-max(modFit2$results$Kappa)
+modelresults[2,6]<-CM2$overall["Accuracy"]
+modelresults[2,7]<-CM2$overall["Kappa"]
+modelresults[2,8]<-as.character(Mod2Start)
+modelresults[2,9]<-as.character(Mod2End)
+modelresults[2,10]<-as.character(round(Mod2End-Mod2Start))
+
+modelresults[3,1]<-modFit3$method
+modelresults[3,2]<-modFit3$modelInfo$label
+modelresults[3,3]<-modFit3$modelType
+modelresults[3,4]<-max(modFit3$results$Accuracy)
+modelresults[3,5]<-max(modFit3$results$Kappa)
+modelresults[3,6]<-CM3$overall["Accuracy"]
+modelresults[3,7]<-CM3$overall["Kappa"]
+modelresults[3,8]<-as.character(Mod3Start)
+modelresults[3,9]<-as.character(Mod3End)
+modelresults[3,10]<-as.character(round(Mod3End-Mod3Start ))
+
+modelresults[4,1]<-"bagging"
+modelresults[4,2]<-"majority voting"
+# modelresults[4,3]<-combModFit$modelType
+# modelresults[4,4]<-max(combModFit$results$Accuracy)
+# modelresults[4,5]<-max(combModFit$results$Kappa)
+modelresults[4,6]<-CMComb$overall["Accuracy"]
+modelresults[4,7]<-CMComb$overall["Kappa"]
+modelresults[4,8]<-as.character(ModCombStart)
+modelresults[4,9]<-as.character(ModCombEnd)
+modelresults[4,10]<-as.character(round(ModCombEnd-ModCombStart))
+registerDoSEQ()
+
+head(modelresults)
+
+```
+
+
