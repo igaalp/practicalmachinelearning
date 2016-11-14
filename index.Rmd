@@ -148,12 +148,13 @@ We will use the Kappa criteria to measure errors because of the classification t
 We have compared 6 classification algorithms: knn, gbm, LogitBoost, J48, rpart and C5.0.
 Off records, the random forest algorithm give very low accuracy and kappa values and consumes a lot of computational energy. For this purpose we have excluded it.
 ```{r comparing models}
-modelcompare<-data.frame(matrix(data=NA, ncol=10))
-names(modelcompare)<-c("Method", "MethodLabel", "ModelType", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa","Start", "End", "Duration")
+modelcompare<-data.frame(matrix(data=NA, ncol=7))
+names(modelcompare)<-c("Method", "MethodLabel", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa", "Duration(minutes)")
 methods<-list("knn", "gbm","LogitBoost","J48", "rpart", "C5.0")
 
-set.seed(12345) 
+
 for (j in 1: length(methods)){
+    set.seed(12345) 
     ModStart<-Sys.time()
     tControl<-trainControl(method="repeatedcv", verboseIter = T) 
     modFit<-train(classe ~., data= trainingtidy, method=as.character(methods[j]),preProcess="pca", metric="Kappa", trControl=tControl)
@@ -163,14 +164,11 @@ for (j in 1: length(methods)){
 
     modelcompare[j,1]<-modFit$method
     modelcompare[j,2]<-modFit$modelInfo$label
-    modelcompare[j,3]<-modFit$modelType
-    modelcompare[j,4]<-max(modFit$results$Accuracy)
-    modelcompare[j,5]<-max(modFit$results$Kappa)
-    modelcompare[j,6]<-CM$overall["Accuracy"]  
-    modelcompare[j,7]<-CM$overall["Kappa"] 
-    modelcompare[j,8]<-ModStart
-    modelcompare[j,9]<-ModEnd
-    modelcompare[j,10]<-ModEnd-ModStart
+    modelcompare[j,3]<-max(modFit$results$Accuracy)
+    modelcompare[j,4]<-max(modFit$results$Kappa)
+    modelcompare[j,5]<-CM$overall["Accuracy"]  
+    modelcompare[j,6]<-CM$overall["Kappa"] 
+    modelcompare[j,7]<-as.character(round(ModEnd-ModStart))
 }
 registerDoSEQ()
 
@@ -182,8 +180,8 @@ We add a voting model using ipred lbrary) to improve the accuracy and kappa.
 
 ```{r stacking models}
 # stacking the 3 best models and voting using ipred library
-modelresults<-data.frame(matrix(data=NA, ncol=10))
-names(modelresults)<-c("Method", "MethodLabel", "ModelType", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa" ,"Start", "End", "Duration(minutes)")
+modelresults<-data.frame(matrix(data=NA, ncol=7))
+names(modelresults)<-c("Method", "MethodLabel", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa" , "Duration(minutes)")
 set.seed(12345) 
 tControl<-trainControl(method="repeatedcv", verboseIter = T)
 
@@ -193,12 +191,14 @@ prediction1<-predict(modFit1, newdata=testingtidy)
 CM1<-confusionMatrix(prediction1, testingtidy$classe)
 Mod1End<-Sys.time()
 
+set.seed(12345)
 Mod2Start<-Sys.time()
 modFit2<-train(classe ~., data= trainingtidy, method="knn" ,preProcess="pca", metric="Kappa", trControl=tControl)
 prediction2<-predict(modFit2, newdata=testingtidy)
 CM2<-confusionMatrix(prediction2, testingtidy$classe)
 Mod2End<-Sys.time()
 
+set.seed(12345)
 Mod3Start<-Sys.time()
 modFit3<-train(classe ~., data= trainingtidy, method="C5.0" ,preProcess="pca", metric="Kappa", trControl=tControl)
 prediction3<-predict(modFit3, newdata=testingtidy)
@@ -206,56 +206,44 @@ CM3<-confusionMatrix(prediction3, testingtidy$classe)
 Mod3End<-Sys.time()
 
 predDF<-data.frame(prediction1, prediction2, prediction3,  classe=testingtidy$classe)
-
+set.seed(12345)
 ModCombStart<-Sys.time()
 combModFit<-bagging(classe ~., data=predDF)
 combPrediction<-predict(combModFit, predDF, aggregation=c("majority"))
-MComb<-confusionMatrix(combPrediction, testingtidy$classe)
+CMComb<-confusionMatrix(combPrediction, testingtidy$classe)
 ModCombEnd<-Sys.time()
 
 modelresults[1,1]<-modFit1$method
 modelresults[1,2]<-modFit1$modelInfo$label
-modelresults[1,3]<-modFit1$modelType
-modelresults[1,4]<-max(modFit1$results$Accuracy)
-modelresults[1,5]<-max(modFit1$results$Kappa)
-modelresults[1,6]<-CM1$overall["Accuracy"]
-modelresults[1,7]<-CM1$overall["Kappa"]
-modelresults[1,8]<-as.character(Mod1Start)
-modelresults[1,9]<-as.character(Mod1End)
-modelresults[1,10]<-as.character(round(Mod1End-Mod1Start))
+modelresults[1,3]<-max(modFit1$results$Accuracy)
+modelresults[1,4]<-max(modFit1$results$Kappa)
+modelresults[1,5]<-CM1$overall["Accuracy"]
+modelresults[1,6]<-CM1$overall["Kappa"]
+modelresults[1,7]<-as.character(round(Mod1End-Mod1Start))
 
 modelresults[2,1]<-modFit2$method
 modelresults[2,2]<-modFit2$modelInfo$label
-modelresults[2,3]<-modFit2$modelType
-modelresults[2,4]<-max(modFit2$results$Accuracy)
-modelresults[2,5]<-max(modFit2$results$Kappa)
-modelresults[2,6]<-CM2$overall["Accuracy"]
-modelresults[2,7]<-CM2$overall["Kappa"]
-modelresults[2,8]<-as.character(Mod2Start)
-modelresults[2,9]<-as.character(Mod2End)
-modelresults[2,10]<-as.character(round(Mod2End-Mod2Start))
+modelresults[2,3]<-max(modFit2$results$Accuracy)
+modelresults[2,4]<-max(modFit2$results$Kappa)
+modelresults[2,5]<-CM2$overall["Accuracy"]
+modelresults[2,6]<-CM2$overall["Kappa"]
+modelresults[2,7]<-as.character(round(Mod2End-Mod2Start))
 
 modelresults[3,1]<-modFit3$method
 modelresults[3,2]<-modFit3$modelInfo$label
-modelresults[3,3]<-modFit3$modelType
-modelresults[3,4]<-max(modFit3$results$Accuracy)
-modelresults[3,5]<-max(modFit3$results$Kappa)
-modelresults[3,6]<-CM3$overall["Accuracy"]
-modelresults[3,7]<-CM3$overall["Kappa"]
-modelresults[3,8]<-as.character(Mod3Start)
-modelresults[3,9]<-as.character(Mod3End)
-modelresults[3,10]<-as.character(round(Mod3End-Mod3Start ))
+modelresults[3,3]<-max(modFit3$results$Accuracy)
+modelresults[3,4]<-max(modFit3$results$Kappa)
+modelresults[3,5]<-CM3$overall["Accuracy"]
+modelresults[3,6]<-CM3$overall["Kappa"]
+modelresults[3,7]<-as.character(round(Mod3End-Mod3Start ))
 
 modelresults[4,1]<-"bagging"
 modelresults[4,2]<-"majority voting"
-# modelresults[4,3]<-combModFit$modelType
-# modelresults[4,4]<-max(combModFit$results$Accuracy)
-# modelresults[4,5]<-max(combModFit$results$Kappa)
-modelresults[4,6]<-CMComb$overall["Accuracy"]
-modelresults[4,7]<-CMComb$overall["Kappa"]
-modelresults[4,8]<-as.character(ModCombStart)
-modelresults[4,9]<-as.character(ModCombEnd)
-modelresults[4,10]<-as.character(round(ModCombEnd-ModCombStart))
+# modelresults[4,3]<-max(combModFit$results$Accuracy)
+# modelresults[4,4]<-max(combModFit$results$Kappa)
+modelresults[4,5]<-CMComb$overall["Accuracy"]
+modelresults[4,6]<-CMComb$overall["Kappa"]
+modelresults[4,7]<-as.character(round(ModCombEnd-ModCombStart))
 registerDoSEQ()
 
 head(modelresults)
