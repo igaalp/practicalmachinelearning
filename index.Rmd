@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE,  warning=FALSE, message=FALSE)
 ```
 
 ## Synopsis
@@ -22,7 +22,7 @@ To achieve this goal, the steps we will go through are:
 5. compare various classification models
 6. choose three best models and stack them together
 
-```{r loading libraries, warnings=FALSE, messages=FALSE}
+```{r loading libraries, warning=FALSE, message=FALSE}
 #Loading required libraries
 library(caret)
 library(ggplot2)
@@ -38,7 +38,7 @@ library(ipred)
 Training and testing sets will are  created from the file "pml-training.csv" (75% for training and 25% for testing).
 Validation set is created from the file "pml-testing.csv"
 
-```{r read training and testing files}
+```{r read training and testing files , warning=FALSE, message=FALSE}
 set.seed(12345)
 fullData<-read.csv("C:/Users/igaal.perez/Documents/Data scientist/8 - Practical Machine Learning/pml-training.csv", stringsAsFactors = F)
 inTrain<-createDataPartition(y=fullData$classe, p=0.75, list=F)
@@ -67,7 +67,7 @@ head(training[1:5, 1:8])
 ```
 
 
-```{r function isNACol checks if the percentage of NAs in each column is below the threshold ( default value at 50%)}
+```{r function isNACol checks if the percentage of NAs in each column is below the threshold ( default value at 50%),  warning=FALSE, message=FALSE}
 isNACol<-function(x, thresh=0.5){
     pcna<-list()
     isBelowThresh=list()
@@ -80,7 +80,7 @@ isBelowThresh<-unlist(isBelowThresh)
 ```
 
 ##Removing variables that have more than 20% of missing values. For this purpose, we have created a function to check if a variable has more than a certain level on missing values
-```{r remove all variables that have less than 20% NAs}
+```{r remove all variables that have less than 20% NAs,  warning=FALSE, message=FALSE}
 fullCol<-isNACol(trainingnonzv,0.2)
 trainingtidy<-trainingnonzv[,fullCol]
 testingtidy<-testingnonzv[,fullCol]
@@ -147,7 +147,7 @@ dev.off()
 We will use the Kappa criteria to measure errors because of the classification type.
 We have compared 6 classification algorithms: knn, gbm, LogitBoost, J48, rpart and C5.0.
 Off records, the random forest algorithm give very low accuracy and kappa values and consumes a lot of computational energy. For this purpose we have excluded it.
-```{r comparing models}
+```{r comparing models, cache=TRUE,  warning=FALSE, message=FALSE}
 modelcompare<-data.frame(matrix(data=NA, ncol=7))
 names(modelcompare)<-c("Method", "MethodLabel", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa", "Duration(minutes)")
 methods<-list("knn", "gbm","LogitBoost","J48", "rpart", "C5.0")
@@ -178,7 +178,7 @@ head(modelcompare)
 As per shown results, we will stack the 3 best models : gbm, knn and C5.0.
 We add a voting model using ipred lbrary) to improve the accuracy and kappa.
 
-```{r stacking models}
+```{r stacking models, cache=TRUE,  warning=FALSE, message=FALSE}
 # stacking the 3 best models and voting using ipred library
 modelresults<-data.frame(matrix(data=NA, ncol=7))
 names(modelresults)<-c("Method", "MethodLabel", "TrainAccuracy", "TrainKappa", "TestAccuracy" , "TestKappa" , "Duration(minutes)")
@@ -250,4 +250,5 @@ head(modelresults)
 
 ```
 
-
+## Conclusion
+By stacking 3 models and majority voting, we can reach prediction accuracy that is greater than 95%. 
