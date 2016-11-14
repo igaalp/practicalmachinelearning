@@ -252,4 +252,4 @@ head(modelresults)
 ```
 
 ## Conclusion
-By stacking 3 models and majority voting, we can reach prediction accuracy that is greater than 95%. 
+By stacking 3 models and majority voting, we can reach prediction accuracy that is greater than 96%. 
